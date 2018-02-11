@@ -152,15 +152,40 @@ class Flatten(Layer):
     def fprop(self, x):
         return tf.reshape(x, [-1, self.output_width])
 
+class MaxPool(Layer):
+
+    def __init__(self, kernel_shape, strides, padding):
+        self.__dict__.update(locals())
+        del self.self
+
+    def set_input_shape(self, shape):
+        self.input_shape = shape
+        self.output_shape = (shape[0], int((shape[1] - self.kernel_shape[0]) / self.strides[0] + 1), int((shape[2] - self.kernel_shape[1]) / self.strides[1] + 1), shape[3])
+
+    def fprop(self, x):
+        return tf.nn.max_pool(x, (1, self.kernel_shape[0], self.kernel_shape[1], 3) , (1, self.strides[0], self.strides[1], 1), self.padding)
 
 def make_basic_cnn(nb_filters=64, nb_classes=10,
-                   input_shape=(None, 28, 28, 1)):
-    layers = [Conv2D(nb_filters, (8, 8), (2, 2), "SAME"),
+                   input_shape=(None, 32, 32, 3)):
+    # layers = [Conv2D(nb_filters, (8, 8), (2, 2), "SAME"),
+    #           ReLU(),
+    #           Conv2D(nb_filters * 2, (6, 6), (2, 2), "VALID"),
+    #           ReLU(),
+    #           Conv2D(nb_filters * 2, (5, 5), (1, 1), "VALID"),
+    #           ReLU(),
+    #           Flatten(),
+    #           Linear(nb_classes),
+    #           Softmax()]
+
+    layers = [Conv2D(nb_filters, (3, 3), (2, 2), "SAME"),
               ReLU(),
-              Conv2D(nb_filters * 2, (6, 6), (2, 2), "VALID"),
+              MaxPool((2,2), (2,2), "SAME"),
+              Conv2D(nb_filters * 2, (3, 3), (2, 2), "SAME"),
               ReLU(),
-              Conv2D(nb_filters * 2, (5, 5), (1, 1), "VALID"),
+              MaxPool((2,2), (2,2), "SAME"),
+              Conv2D(nb_filters * 2, (3, 3), (1, 1), "SAME"),
               ReLU(),
+              MaxPool((2,2), (2,2), "SAME"),
               Flatten(),
               Linear(nb_classes),
               Softmax()]
