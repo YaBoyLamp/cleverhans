@@ -10,6 +10,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import h5py
 import os, os.path
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
@@ -19,17 +20,47 @@ import tensorflow as tf
 from tensorflow.python.platform import flags
 import logging
 
+from keras import backend as K
+from keras.models import Sequential, load_model, model_from_json
+from keras.layers.convolutional import Convolution2D, MaxPooling2D
+from keras.layers import Activation, Flatten, Dense, Dropout
+from keras.layers.normalization import BatchNormalization
+from keras.utils import np_utils
+
 from keras.datasets import cifar10
 from cleverhans.utils_mnist import data_mnist
 from cleverhans.utils_tf import model_train, model_eval
 from cleverhans.attacks import FastGradientMethod
 from cleverhans_tutorials.tutorial_models import make_basic_cnn
 from cleverhans.utils import AccuracyReport, set_log_level
+from cleverhans.utils_keras import KerasModelWrapper
 
 import os
 
 FLAGS = flags.FLAGS
 
+def accuracy_f(test_x, test_y, model):
+    result = model.predict(test_x)
+    predicted_class = np.argmax(result, axis=1)
+    true_class = np.argmax(test_y, axis=1)
+    num_correct = np.sum(predicted_class == true_class) 
+    accuracy = float(num_correct)/result.shape[0]
+    return (accuracy * 100)
+
+def save_ker_model(model, filename):
+    model_json = model.to_json()
+    with open(filename + ".json", "w") as json_file:
+        json_file.write(model_json)
+    model.save_weights(filename + ".h5")
+
+def load_ker_model(filename):
+    json_file = open(filename + ".json", 'r')
+    loaded_model_json = json_file.read()
+    json_file.close()
+    loaded_model = model_from_json(loaded_model_json)
+    # load weights into new model
+    loaded_model.load_weights(filename + ".h5")
+    return loaded_model
 
 def cifar10_tutorial(train_start=0, train_end=60000, test_start=0,
                    test_end=10000, nb_epochs=6, batch_size=128,
@@ -114,7 +145,7 @@ def cifar10_tutorial(train_start=0, train_end=60000, test_start=0,
     rng = np.random.RandomState([2017, 8, 30])
 
     if clean_train:
-        model = make_basic_cnn(nb_filters=nb_filters)
+        model = generate_model()
         preds = model.get_probs(x)
 
         def evaluate():
@@ -154,11 +185,11 @@ def cifar10_tutorial(train_start=0, train_end=60000, test_start=0,
             acc = model_eval(sess, x, y, preds_adv, X_train,
                              Y_train, args=eval_par)
             report.train_clean_train_adv_eval = acc
-
         print("Repeating the process, using adversarial training")
+
     # Redefine TF model graph
-    model_2 = make_basic_cnn(nb_filters=nb_filters)
-    preds_2 = model_2(x)
+    model_2 = generate_model()
+    preds_2 = model_2.get_probs(x)
     fgsm2 = FastGradientMethod(model_2, sess=sess)
     adv_x_2 = fgsm2.generate(x, **fgsm_params)
     if not backprop_through_attack:
@@ -202,6 +233,38 @@ def cifar10_tutorial(train_start=0, train_end=60000, test_start=0,
 
     return report
 
+def generate_model():
+    model2 = Sequential()
+    model2.add(Convolution2D(32, 3, 3, border_mode='same', input_shape=(32,32,3)))
+    model2.add(Activation('relu'))
+    model2.add(Convolution2D(32,3,3, border_mode='same'))
+    model2.add(Activation('relu'))
+    model2.add(MaxPooling2D(pool_size=(2, 2)))
+    model2.add(Dropout(0.25))
+    model2.add(Convolution2D(64, 3, 3, border_mode='same'))
+    model2.add(Activation('relu'))
+    model2.add(Convolution2D(64,3,3, border_mode='same'))
+    model2.add(Activation('relu'))
+    model2.add(MaxPooling2D(pool_size=(2, 2)))
+    model2.add(Dropout(0.25))
+    model2.add(Convolution2D(128, 3, 3, border_mode='same'))
+    model2.add(Activation('relu'))
+    model2.add(Convolution2D(128,3,3, border_mode='same'))
+    model2.add(Activation('relu'))
+    model2.add(MaxPooling2D(pool_size=(2, 2)))
+    model2.add(Dropout(0.25))
+    model2.add(Flatten())
+    model2.add(Dense(512))
+    model2.add(Activation('relu'))
+    model2.add(Dropout(0.5))
+    model2.add(Dense(256))
+    model2.add(Activation('relu'))
+    model2.add(Dropout(0.5))
+    model2.add(Dense(10, activation='softmax'))
+    # Compile the model
+    model2.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    return KerasModelWrapper(model2)
 
 def main(argv=None):
     cifar10_tutorial(nb_epochs=FLAGS.nb_epochs, batch_size=FLAGS.batch_size,
@@ -213,7 +276,7 @@ def main(argv=None):
 
 if __name__ == '__main__':
     flags.DEFINE_integer('nb_filters', 64, 'Model size multiplier')
-    flags.DEFINE_integer('nb_epochs', 6, 'Number of epochs to train model')
+    flags.DEFINE_integer('nb_epochs', 200, 'Number of epochs to train model')
     flags.DEFINE_integer('batch_size', 128, 'Size of training batches')
     flags.DEFINE_float('learning_rate', 0.001, 'Learning rate for training')
     flags.DEFINE_bool('clean_train', True, 'Train on clean examples')

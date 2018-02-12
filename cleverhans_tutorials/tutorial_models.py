@@ -163,7 +163,7 @@ class MaxPool(Layer):
         self.output_shape = (shape[0], int((shape[1] - self.kernel_shape[0]) / self.strides[0] + 1), int((shape[2] - self.kernel_shape[1]) / self.strides[1] + 1), shape[3])
 
     def fprop(self, x):
-        return tf.nn.max_pool(x, (1, self.kernel_shape[0], self.kernel_shape[1], 3) , (1, self.strides[0], self.strides[1], 1), self.padding)
+        return tf.nn.max_pool(x, (1, self.kernel_shape[0], self.kernel_shape[1], 1) , (1, self.strides[0], self.strides[1], 1), self.padding)
 
 def make_basic_cnn(nb_filters=64, nb_classes=10,
                    input_shape=(None, 32, 32, 3)):
@@ -177,13 +177,17 @@ def make_basic_cnn(nb_filters=64, nb_classes=10,
     #           Linear(nb_classes),
     #           Softmax()]
 
-    layers = [Conv2D(nb_filters, (3, 3), (2, 2), "SAME"),
+    layers = [Conv2D(nb_filters, (2, 2), (2, 2), "SAME"),
+              ReLU(),
+              Conv2D(nb_filters, (2, 2), (1, 1), "SAME"),
               ReLU(),
               MaxPool((2,2), (2,2), "SAME"),
               Conv2D(nb_filters * 2, (3, 3), (2, 2), "SAME"),
               ReLU(),
+              Conv2D(nb_filters, (2, 2), (1, 1), "SAME"),
+              ReLU(),
               MaxPool((2,2), (2,2), "SAME"),
-              Conv2D(nb_filters * 2, (3, 3), (1, 1), "SAME"),
+              Conv2D(nb_filters * 4, (3, 3), (1, 1), "SAME"),
               ReLU(),
               MaxPool((2,2), (2,2), "SAME"),
               Flatten(),
